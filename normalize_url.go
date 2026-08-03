@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,7 +28,7 @@ func getHTML(rawURL string) (string, error) {
 		return "", err
 	}
 
-	req.Header.Set(req.UserAgent(), "BootCrawler/1.0")
+	req.Header.Set("User-Agent", "BootCrawler/1.0")
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -37,10 +38,19 @@ func getHTML(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	if resp.StatusCode > 400 {
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
 		return "", errors.New(resp.Status)
 	}
-	defer resp.Body.Close()
-	return "", nil
+
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		return "", errors.New("invalid content type")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
 }

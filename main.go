@@ -14,5 +14,6 @@ func main() {
 		os.Exit(1)
 	} else {
 		fmt.Printf("starting crawl of: %v\n", os.Args[1:])
+		fmt.Println(getHTML(os.Args[1]))
 	}
 }
