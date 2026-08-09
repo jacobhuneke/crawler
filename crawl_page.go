@@ -1,36 +1,46 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 )
 
 func (cfg *config) crawlPage(rawCurrentURL string) {
+	defer cfg.wg.Done()
 	cfg.concurrencyControl <- struct{}{}
 	defer func() {
 		<-cfg.concurrencyControl
-		cfg.wg.Done()
 	}()
 
+	cfg.mu.Lock()
+	if len(cfg.pages) >= cfg.maxPages {
+		cfg.mu.Unlock()
+		return
+	}
+	cfg.mu.Unlock()
 	currentURL, err := url.Parse(rawCurrentURL)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return
 	}
-	if cfg.baseURL.Host != currentURL.Host {
+	if cfg.baseURL.Hostname() != currentURL.Hostname() {
 		return
 	}
 
 	curr, err := normalizeURL(rawCurrentURL)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return
 	}
 
 	if !cfg.addPageVisit(curr) {
 		return
 	} else {
+		fmt.Printf("crawling page %s\n", rawCurrentURL)
 		html, err := getHTML(rawCurrentURL)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return
 		}
 
 		cfg.mu.Lock()
@@ -39,7 +49,8 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 
 		urls, err := getURLsFromHTML(html, cfg.baseURL)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return
 		}
 		for _, url := range urls {
 			cfg.wg.Add(1)
