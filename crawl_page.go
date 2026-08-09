@@ -1,46 +1,62 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 )
 
-func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
-	baseURL, err := url.Parse(rawBaseURL)
-	if err != nil {
-		log.Fatal(err)
-	}
+func (cfg *config) crawlPage(rawCurrentURL string) {
+	cfg.concurrencyControl <- struct{}{}
+	defer func() {
+		<-cfg.concurrencyControl
+		cfg.wg.Done()
+	}()
+
 	currentURL, err := url.Parse(rawCurrentURL)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if baseURL.Host != currentURL.Host {
+	if cfg.baseURL.Host != currentURL.Host {
 		return
 	}
+
 	curr, err := normalizeURL(rawCurrentURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, exists := pages[curr]
-	if exists {
-		pages[curr] += 1
+	if !cfg.addPageVisit(curr) {
 		return
 	} else {
-		pages[curr] = 1
 		html, err := getHTML(rawCurrentURL)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(html)
-		urls, err := getURLsFromHTML(html, baseURL)
+
+		cfg.mu.Lock()
+		cfg.pages[curr] = extractPageData(html, curr)
+		cfg.mu.Unlock()
+
+		urls, err := getURLsFromHTML(html, cfg.baseURL)
 		if err != nil {
 			log.Fatal(err)
 		}
 		for _, url := range urls {
-			crawlPage(rawBaseURL, url, pages)
+			cfg.wg.Add(1)
+			go cfg.crawlPage(url)
 		}
 	}
 
+}
+
+func (cfg *config) addPageVisit(normalizedURL string) (isFirst bool) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	_, ok := cfg.pages[normalizedURL]
+	if !ok {
+		cfg.pages[normalizedURL] = PageData{}
+		return true
+	}
+
+	return false
 }
