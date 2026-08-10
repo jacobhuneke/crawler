@@ -51,11 +51,6 @@ func main() {
 		cfg.wg.Add(1)
 		go cfg.crawlPage(base.String())
 		cfg.wg.Wait()
-		for _, page := range cfg.pages {
-			fmt.Println(page.Heading)
-			fmt.Println(page.FirstParagraph)
-			fmt.Println(page.ImageURLs)
-			fmt.Println(page.OutgoingLinks)
-		}
+		writeJSONReport(cfg.pages, "report.json")
 	}
 }
